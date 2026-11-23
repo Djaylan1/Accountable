@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Accountable">
 <meta name="theme-color" content="#05091A">
 <link rel="manifest" href="/manifest.json">
-<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -48,6 +48,7 @@ button { font:inherit; color:inherit; border:0; background:none; cursor:pointer;
 button:active { transform:scale(.97); }
 
 /* header */
+.pip-logo{height:26px;width:auto;display:block;margin-bottom:14px}
 .top { display:flex; align-items:flex-start; justify-content:space-between; padding-top:6px; }
 .eyebrow { font:500 13px var(--body); letter-spacing:.04em; color:var(--mut); }
 h1 { font:500 40px/1.05 var(--body); letter-spacing:-.025em; margin:8px 0 0; }
@@ -170,7 +171,13 @@ input:focus { border-color:var(--blue-hi); box-shadow:0 0 0 3px rgba(79,128,222,
 <body>
 
 <div class="top">
-  <div><div class="eyebrow" id="date"></div><h1 id="greet"></h1></div>
+  <div><svg class="pip-logo" viewBox="0 0 126 64" aria-label="PiP Farming"><defs><linearGradient id="pipg" x1="83.6917" y1="14.359" x2="9.43532" y2="57.4359" gradientUnits="userSpaceOnUse"><stop stop-color="white"/><stop offset="0.42" stop-color="#4273D1"/><stop offset="1" stop-color="#4273D1" stop-opacity="0"/></linearGradient></defs>
+      <circle cx="55.3845" cy="7.79485" r="6.97436" fill="white"/>
+      <path d="M111.999 21.3333C111.999 16.8018 108.326 13.1282 103.794 13.1282H99.6917C89.2955 13.1282 84.9135 14.4033 81.1941 17.0208C79.1373 18.4684 77.0161 20.525 74.2518 23.6651C71.4454 26.853 68.3597 30.7026 64.1188 35.7917C56.3959 45.0592 47.4778 51.9976 39.5122 56.6442C35.5261 58.9695 31.7062 60.7635 28.3111 61.9928C25.0441 63.1757 21.7251 64 18.8712 64V50.8718C19.5045 50.8718 21.1599 50.6192 23.8416 49.6482C26.3952 48.7237 29.4985 47.2869 32.8969 45.3045C39.7004 41.3357 47.3979 35.3509 54.0339 27.3878C58.0416 22.5785 61.4395 18.3507 64.3977 14.9904C67.3978 11.5824 70.3221 8.61947 73.6388 6.28526C80.6669 1.33921 88.3444 0 99.6917 0H103.794C115.576 0 125.128 9.55126 125.128 21.3333C125.128 33.1154 115.576 42.6667 103.794 42.6667H103.384V29.5385H103.794C108.326 29.5385 111.999 25.8649 111.999 21.3333Z" fill="url(#pipg)"/>
+      <path d="M96.8214 29.5384H103.386V42.6666H96.8214V63.1794H83.6932V29.7612C83.6932 28.0058 84.0628 26.2037 85.2204 24.8841C87.4189 22.3779 90.2053 21.9336 96.8214 21.0168V29.5384Z" fill="#FEFEFE"/>
+      <path d="M50.8712 54.9744C55.9255 51.7274 60.2536 47.4703 63.5837 42.4704L63.9994 41.8462V63.1795H50.8712V54.9744Z" fill="#FEFEFE"/>
+      <path d="M20.9231 0.820496C32.7052 0.820496 42.2564 10.3718 42.2564 22.1538C42.2564 33.9359 32.7052 43.4872 20.9231 43.4872H13.9487V64H0.820513V30.1009C0.820513 28.6606 1.14345 27.2023 2.03926 26.0745C4.29113 23.2394 7.01952 22.7975 13.9487 21.8373V30.359H20.9231C25.4546 30.359 29.1282 26.6854 29.1282 22.1538C29.1282 17.6223 25.4546 13.9487 20.9231 13.9487H16.8205C7.93224 13.9487 3.44048 14.8815 0 16.7876V2.67066C4.74779 1.28439 10.1499 0.820496 16.8205 0.820496H20.9231Z" fill="white"/>
+    </svg><div class="eyebrow" id="date"></div><h1 id="greet"></h1></div>
   <button class="icon-btn" id="gear" aria-label="Instellingen">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
   </button>
