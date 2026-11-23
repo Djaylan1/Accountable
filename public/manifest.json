@@ -3,7 +3,7 @@
   "short_name": "Accountable",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#111111",
-  "theme_color": "#111111",
+  "background_color": "#05091A",
+  "theme_color": "#05091A",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }
