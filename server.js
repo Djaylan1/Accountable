@@ -49,7 +49,14 @@ async function init() {
   } else {
     try { saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch {}
   }
-  db.tasks = (saved.tasks || []).map((t) => ({ goal: null, unit: '', emoji: '', history: [], ...t }));
+  db.tasks = (saved.tasks || []).map((t) => {
+    const x = { goal: null, unit: '', emoji: '', nextGoal: null, history: [], ...t };
+    x.history = x.history.map((e) => ({
+      goal: null, logs: e.amount ? [{ at: e.doneAt || e.firedAt, amount: e.amount }] : [], ...e,
+      amount: e.amount || 0, ...(e.doneAt && e.met === undefined ? { met: true } : {}),
+    }));
+    return x;
+  });
   db.subs = saved.subs || [];
   db.key = process.env.APP_KEY || saved.key || crypto.randomBytes(12).toString('hex');
   db.vapid = process.env.VAPID_PUBLIC
@@ -71,11 +78,18 @@ async function push(payload) {
   save();
 }
 
-const notify = (t, reminder) => push({
-  tag: 'task-' + t.id,
-  title: reminder ? 'Nog niet gedaan: ' + t.name : t.name,
-  body: reminder ? 'Het is alweer een uur geleden. Tik om af te vinken.' : 'Je bent wakker. Tijd om het te doen!',
-});
+function notify(t, reminder) {
+  const r = t.history[t.history.length - 1] || {};
+  const goal = r.goal, unit = t.unit ? ' ' + t.unit : '';
+  const left = goal ? Math.max(0, goal - (r.amount || 0)) : 0;
+  return push({
+    tag: 'task-' + t.id,
+    title: reminder ? 'Nog niet gedaan: ' + t.name : t.name,
+    body: reminder
+      ? (goal ? `Nog ${left}${unit} te gaan van ${goal}. Tik om te loggen.` : 'Het is alweer een uur geleden. Tik om af te vinken.')
+      : (goal ? `Je bent wakker. Doel: ${goal}${unit}.` : 'Je bent wakker. Tijd om het te doen!'),
+  });
+}
 
 const app = express();
 app.use(express.json());
@@ -117,27 +131,52 @@ app.delete('/api/tasks/:id', auth, (req, res) => {
   db.tasks = db.tasks.filter((t) => t.id !== req.params.id); save(); res.json({ ok: true });
 });
 
-// Afvinken: sluit de lopende ronde af, of logt een losse (handmatige) ronde.
-app.post('/api/tasks/:id/done', auth, (req, res) => {
+// Doel voor de volgende ronde (bv. "morgen 40 push-ups"). Leeg = standaarddoel.
+app.post('/api/tasks/:id/next-goal', auth, (req, res) => {
   const t = db.tasks.find((x) => x.id === req.params.id);
   if (!t) return res.status(404).json({ error: 'onbekend' });
-  const now = Date.now();
-  const amount = Number(req.body?.amount) > 0 ? Number(req.body.amount) : null;
-  const last = t.history[t.history.length - 1];
-  if (t.status === 'open' && last && !last.doneAt) Object.assign(last, { doneAt: now, amount });
-  else t.history.push({ firedAt: now, doneAt: now, amount, manual: true });
-  Object.assign(t, { status: 'done', remindAt: null });
+  const g = Number(req.body?.goal);
+  t.nextGoal = g > 0 ? Math.min(g, 100000) : null;
   save(); res.json(t);
 });
 
-// Per ongeluk afgevinkt? Haal de laatste voltooiing terug.
+// Loggen: telt op bij de lopende ronde (ook deelaantallen, bv. 7 nu en 23 later).
+// De ronde sluit zodra het doel gehaald is, of als je zelf afrondt (finish).
+app.post('/api/tasks/:id/log', auth, (req, res) => {
+  const t = db.tasks.find((x) => x.id === req.params.id);
+  if (!t) return res.status(404).json({ error: 'onbekend' });
+  const now = Date.now();
+  const amt = Number(req.body?.amount) > 0 ? Math.min(Number(req.body.amount), 100000) : 0;
+  let r = t.history[t.history.length - 1];
+  if (!(t.status === 'open' && r && !r.doneAt)) {
+    r = { firedAt: now, doneAt: null, amount: 0, goal: t.nextGoal || t.goal || null, logs: [], manual: true };
+    t.nextGoal = null;
+    t.history.push(r);
+    if (t.history.length > 200) t.history.shift();
+    Object.assign(t, { status: 'open', remindAt: null });
+  }
+  if (amt) { r.logs.push({ at: now, amount: amt }); r.amount = r.logs.reduce((a, l) => a + l.amount, 0); }
+  if (req.body?.finish || !r.goal || r.amount >= r.goal) {
+    Object.assign(r, { doneAt: now, met: !r.goal || r.amount >= r.goal });
+    Object.assign(t, { status: 'done', remindAt: null });
+  }
+  save(); res.json(t);
+});
+
+// Vergissing? Haal de laatste log (of de afronding) terug.
 app.post('/api/tasks/:id/undo', auth, (req, res) => {
   const t = db.tasks.find((x) => x.id === req.params.id);
-  const last = t && t.history[t.history.length - 1];
-  if (!last || !last.doneAt) return res.status(400).json({ error: 'niets om terug te zetten' });
-  if (last.manual) t.history.pop();
-  else Object.assign(last, { doneAt: null, amount: null });
-  if (!last.manual) Object.assign(t, { status: 'open', remindAt: Date.now() + REMIND_AFTER_MIN * 60e3, reminded: false });
+  const r = t && t.history[t.history.length - 1];
+  if (!r || (!r.doneAt && !r.logs.length)) return res.status(400).json({ error: 'niets om terug te zetten' });
+  if (r.logs.length) r.logs.pop();
+  r.amount = r.logs.reduce((a, l) => a + l.amount, 0);
+  if (r.manual && !r.logs.length) {
+    t.history.pop();
+    Object.assign(t, { status: 'done', remindAt: null });
+  } else {
+    r.doneAt = null; delete r.met;
+    Object.assign(t, { status: 'open', remindAt: r.manual ? null : Date.now() + REMIND_AFTER_MIN * 60e3, reminded: false });
+  }
   save(); res.json(t);
 });
 
@@ -159,9 +198,17 @@ async function wakker(req, res) {
   const fired = [];
   for (const t of db.tasks) {
     if (t.firedAt && now - t.firedAt < DEDUPE_HOURS * 3600e3) continue;
+    const last = t.history[t.history.length - 1];
+    const next = t.nextGoal || null;
+    t.nextGoal = null;
+    if (t.status === 'open' && last && !last.doneAt && last.manual) {
+      // Je had al gelogd vóór je wekker: die ronde wordt de ronde van vandaag.
+      Object.assign(last, { manual: false, firedAt: now, goal: next ?? last.goal });
+    } else {
+      t.history.push({ firedAt: now, doneAt: null, amount: 0, goal: next ?? t.goal ?? null, logs: [] });
+      if (t.history.length > 200) t.history.shift();
+    }
     Object.assign(t, { status: 'open', firedAt: now, remindAt: now + REMIND_AFTER_MIN * 60e3, reminded: false });
-    t.history.push({ firedAt: now, doneAt: null, amount: null });
-    if (t.history.length > 200) t.history.shift();
     fired.push(t);
   }
   save();

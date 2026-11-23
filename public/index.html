@@ -93,6 +93,11 @@ h1 em { font-style:normal; color:var(--acc); }
 .chip.fire { color:#ffb38a; border-color:rgba(255,106,43,.4); background:rgba(255,106,43,.1); }
 .status { margin-top:7px; font-size:13px; color:var(--mut); }
 .card.open .status { color:#ffb38a; }
+.bar { height:8px; border-radius:5px; background:var(--s3); margin-top:10px; overflow:hidden; }
+.bar i { display:block; height:100%; border-radius:5px; background:linear-gradient(90deg, var(--ember), var(--acc)); animation:grow 1s var(--ease); }
+@keyframes grow { from { width:0 !important; } }
+.card.miss .check { background:rgba(255,106,43,.14); border-color:#a8501f; box-shadow:none; }
+.card.miss .check svg { stroke:#ffb38a; }
 .dots { display:flex; gap:4px; margin-top:9px; }
 .dots i { width:9px; height:9px; border-radius:3px; background:var(--s3); }
 .dots i.y { background:var(--acc); }
@@ -210,18 +215,21 @@ const fmtDay = (ts) => {
   return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
+// Een ronde telt voor je reeks als hij is afgesloten en het doel gehaald is.
+const hit = (e) => !!e.doneAt && e.met !== false;
 function stats(t) {
   const h = t.history || [];
   let i = h.length - 1;
-  if (i >= 0 && !h[i].doneAt && t.status === 'open') i--;
-  let cur = 0; for (; i >= 0 && h[i].doneAt; i--) cur++;
+  if (i >= 0 && !h[i].doneAt && t.status === 'open') i--; // lopende ronde breekt je reeks nog niet
+  let cur = 0; for (; i >= 0 && hit(h[i]); i--) cur++;
   let best = 0, run = 0;
-  for (const e of h) { if (e.doneAt) { run++; best = Math.max(best, run); } else run = 0; }
-  const total = h.filter((e) => e.doneAt).length;
-  const amount = h.reduce((a, e) => a + (e.doneAt ? e.amount || 0 : 0), 0);
+  for (const e of h) { if (hit(e)) { run++; best = Math.max(best, run); } else run = 0; }
+  const total = h.filter(hit).length;
+  const amount = h.reduce((a, e) => a + (e.amount || 0), 0);
   const last = h[h.length - 1];
   const doneRecent = !!(last && last.doneAt && t.status !== 'open' && Date.now() - last.doneAt < 18 * 3600e3);
-  return { cur, best, total, amount, last, doneRecent };
+  const miss = doneRecent && last.met === false;
+  return { cur, best, total, amount, last, doneRecent, miss };
 }
 
 function countUp(el, to, ms = 900) {
@@ -235,9 +243,12 @@ function countUp(el, to, ms = 900) {
 /* ---------- state & render ---------- */
 let tasks = [], firstRender = true, popId = null;
 
+const getName = () => { try { return localStorage.getItem('name') ?? 'Djaylan'; } catch { return 'Djaylan'; } };
 function greeting() {
-  const h = new Date().getHours();
-  return h < 5 ? 'Goede<em>nacht</em>' : h < 12 ? 'Goede<em>morgen</em>' : h < 18 ? 'Goede<em>middag</em>' : 'Goede<em>avond</em>';
+  const h = new Date().getHours(), n = getName().trim();
+  // 00-05 nacht, 05-12 ochtend, 12-18 middag, 18-24 avond
+  const g = h < 5 ? 'Goedenacht' : h < 12 ? 'Goedemorgen' : h < 18 ? 'Goedemiddag' : 'Goedenavond';
+  return esc(g) + (n ? `<br><em>${esc(n)}</em>` : '');
 }
 
 function render() {
@@ -265,16 +276,21 @@ function render() {
   list.innerHTML = S.map(({ t, s }, i) => {
     const st = t.status === 'open' ? 'open' : s.doneRecent ? 'done' : 'idle';
     const recent = (t.history || []).slice(-10);
-    const dots = recent.map((e, j) => `<i class="${e.doneAt ? 'y' : (j === recent.length - 1 && t.status === 'open') ? 'o' : 'n'}"></i>`).join('');
-    const status = st === 'open' ? `Wacht op je sinds ${fmtTime(s.last.firedAt)}`
-      : st === 'done' ? `Gedaan om ${fmtTime(s.last.doneAt)}${s.last.amount ? ' · ' + s.last.amount + (t.unit ? ' ' + esc(t.unit) : '') : ''}`
-      : s.last ? `Laatst gedaan ${fmtDay(s.last.doneAt || s.last.firedAt).toLowerCase()}` : 'Wacht op je eerste wake-up';
-    return `<article class="card ${st}${popId === t.id ? ' pop' : ''}" style="--i:${firstRender ? i : 0}" data-id="${t.id}">
+    const dots = recent.map((e, j) => `<i class="${hit(e) ? 'y' : (j === recent.length - 1 && t.status === 'open') ? 'o' : 'n'}"></i>`).join('');
+    const u = t.unit ? ' ' + esc(t.unit) : '';
+    const r = s.last, g = r && r.goal;
+    const status = st === 'open'
+      ? (r.amount ? `${r.amount}${g ? ' van ' + g : ''}${u} gelogd${g ? ' · nog ' + Math.max(0, g - r.amount) : ''}` : `Wacht op je sinds ${fmtTime(r.firedAt)}`)
+      : st === 'done' ? (s.miss ? `Afgerond om ${fmtTime(r.doneAt)} · ${r.amount} van ${r.goal}${u}`
+          : `Gedaan om ${fmtTime(r.doneAt)}${r.amount ? ' · ' + r.amount + (g ? '/' + g : '') + u : ''}`)
+      : r ? `Laatst gedaan ${fmtDay(r.doneAt || r.firedAt).toLowerCase()}` : 'Wacht op je eerste wake-up';
+    const bar = st === 'open' && g ? `<div class="bar"><i style="width:${Math.min(100, Math.round(((r.amount || 0) / g) * 100))}%"></i></div>` : '';
+    return `<article class="card ${st}${s.miss ? ' miss' : ''}${popId === t.id ? ' pop' : ''}" style="--i:${firstRender ? i : 0}" data-id="${t.id}">
       <button class="check" data-act="check" aria-label="Markeer ${esc(t.name)} als gedaan"><svg viewBox="0 0 30 30"><path d="M6 16l6 6 12-14"/></svg></button>
       <div class="body" data-act="detail">
         <div class="name">${t.emoji ? esc(t.emoji) + ' ' : ''}${esc(t.name)}</div>
-        <div class="meta">${t.goal ? `<span class="chip">${t.goal} ${esc(t.unit)}</span>` : ''}${s.cur ? `<span class="chip fire">🔥 ${s.cur} op rij</span>` : ''}</div>
-        <div class="status">${status}</div>
+        <div class="meta">${g || t.goal ? `<span class="chip">Doel ${g || t.goal}${u}</span>` : ''}${t.nextGoal ? `<span class="chip">Volgende: ${t.nextGoal}</span>` : ''}${s.cur ? `<span class="chip fire">🔥 ${s.cur} op rij</span>` : ''}</div>
+        <div class="status">${status}</div>${bar}
         <div class="dots">${dots}</div>
       </div></article>`;
   }).join('');
@@ -304,7 +320,7 @@ function formSheet(t) {
   openSheet(`<h3>${t ? 'Aanpassen' : 'Nieuwe gewoonte'}</h3><p class="sub">Wat ga je elke wake-up doen?</p>
     <label>Kies een icoon</label><div class="emojis">${E.map((e) => `<button type="button" data-e="${e}" class="${e === emoji ? 'sel' : ''}">${e}</button>`).join('')}</div>
     <label>Naam</label><input type="text" id="fname" maxlength="80" placeholder="Push-ups" value="${esc(t?.name || '')}">
-    <div class="row2"><div><label>Doel (optioneel)</label><input type="number" id="fgoal" inputmode="numeric" min="1" placeholder="30" value="${t?.goal || ''}"></div>
+    <div class="row2"><div><label>Standaarddoel</label><input type="number" id="fgoal" inputmode="numeric" min="1" placeholder="30" value="${t?.goal || ''}"></div>
     <div><label>Eenheid</label><input type="text" id="funit" maxlength="20" placeholder="herhalingen" value="${esc(t?.unit || '')}"></div></div>
     <button class="btn pri" id="fsave">${t ? 'Opslaan' : 'Toevoegen'}</button>${t ? '<button class="btn dng" id="fdel">Verwijderen</button>' : ''}`,
     () => {
@@ -318,17 +334,24 @@ function formSheet(t) {
     });
 }
 
-function doneSheet(t, originEl) {
-  let n = t.goal || 1;
-  openSheet(`<h3>${esc(t.name)}</h3><p class="sub">Hoeveel heb je gedaan?</p>
+// Log-sheet: voeg een (deel)aantal toe aan de lopende ronde.
+function logSheet(t, originEl) {
+  const s = stats(t), open = t.status === 'open' && s.last && !s.last.doneAt;
+  const goal = open ? s.last.goal : (t.nextGoal || t.goal), have = open ? s.last.amount || 0 : 0;
+  const left = goal ? Math.max(0, goal - have) : 0;
+  let n = left || 1;
+  const step = (goal || 0) >= 100 ? 10 : (goal || 0) >= 40 ? 5 : 1;
+  openSheet(`<h3>${esc(t.name)}</h3>
+    <p class="sub">${goal ? `Doel ${goal}${t.unit ? ' ' + esc(t.unit) : ''} · al ${have} gelogd${left ? ' · nog ' + left : ''}` : 'Hoeveel heb je gedaan?'}</p>
     <div class="stepper"><button id="m" aria-label="Minder">−</button><div class="val"><b id="n">${n}</b><span>${esc(t.unit || 'keer')}</span></div><button id="p" aria-label="Meer">+</button></div>
-    <button class="btn pri" id="ok">Gedaan ✓</button><button class="btn" id="skip">Zonder aantal loggen</button>`,
+    <button class="btn pri" id="ok">${goal && n < left ? 'Loggen' : 'Gedaan'} ✓</button>
+    ${goal && have + 1 < goal ? '<button class="btn" id="fin">Loggen en dag afronden</button>' : ''}`,
     () => {
-      const step = t.goal >= 50 ? 5 : 1, upd = () => $('#n').textContent = n;
+      const upd = () => { $('#n').textContent = n; $('#ok').textContent = (goal && have + n < goal ? 'Loggen' : 'Gedaan') + ' ✓'; };
       $('#m').onclick = () => { n = Math.max(1, n - step); upd(); };
       $('#p').onclick = () => { n += step; upd(); };
-      $('#ok').onclick = () => { closeSheet(); complete(t, n, originEl); };
-      $('#skip').onclick = () => { closeSheet(); complete(t, null, originEl); };
+      $('#ok').onclick = () => { closeSheet(); complete(t, n, false, originEl); };
+      if ($('#fin')) $('#fin').onclick = () => { closeSheet(); complete(t, n, true, originEl); };
     });
 }
 
@@ -337,12 +360,21 @@ function detailSheet(t) {
   openSheet(`<h3>${t.emoji ? esc(t.emoji) + ' ' : ''}${esc(t.name)}</h3><p class="sub">${t.goal ? `Doel: ${t.goal} ${esc(t.unit)}` : 'Geen vast doel'}</p>
     <div class="stats"><div class="stat"><b>${s.cur}</b><span>Op rij</span></div><div class="stat"><b>${s.best}</b><span>Record</span></div><div class="stat"><b>${s.total}</b><span>Totaal</span></div></div>
     ${s.amount ? `<p class="sub" style="text-align:center;margin:8px 0 0">In totaal <b style="color:var(--acc)">${s.amount}</b> ${esc(t.unit)}</p>` : ''}
-    <div class="hist">${h.length ? h.map((e) => `<div><span>${fmtDay(e.firedAt)} · ${fmtTime(e.firedAt)}</span><span class="${e.doneAt ? 'ok' : 'miss'}">${e.doneAt ? '✓ ' + (e.amount ? e.amount + ' ' + esc(t.unit) : 'gedaan') : (t.status === 'open' && e === t.history[t.history.length - 1] ? 'open' : 'gemist')}</span></div>`).join('') : '<div><span>Nog geen geschiedenis</span></div>'}</div>
+    <label>Doel voor de volgende ronde</label>
+    <div class="row2" style="grid-template-columns:1fr auto"><input type="number" id="ng" inputmode="numeric" min="1" placeholder="${t.goal || 'Geen doel'}" value="${t.nextGoal || ''}"><button class="btn" id="ngs" style="width:auto;margin:0;padding:0 20px;height:52px;font-size:18px">Zet</button></div>
+    <p class="sub" style="margin:6px 0 0;font-size:12px">Geldt voor je eerstvolgende wake-up. Leeg laten = standaarddoel${t.goal ? ' (' + t.goal + ')' : ''}.</p>
+    <div class="hist">${h.length ? h.map((e) => {
+      const live = !e.doneAt && t.status === 'open' && e === t.history[t.history.length - 1];
+      const amt = e.amount ? `${e.amount}${e.goal ? '/' + e.goal : ''}${t.unit ? ' ' + esc(t.unit) : ''}` : '';
+      const cls = hit(e) ? 'ok' : live ? '' : 'miss';
+      const txt = hit(e) ? '✓ ' + (amt || 'gedaan') : live ? 'bezig ' + amt : e.doneAt ? '✗ ' + amt : 'gemist';
+      return `<div><span>${fmtDay(e.firedAt)} · ${fmtTime(e.firedAt)}</span><span class="${cls}">${txt}</span></div>`; }).join('') : '<div><span>Nog geen geschiedenis</span></div>'}</div>
     <button class="btn pri" id="more">+ Nu loggen</button>
-    ${s.last && s.last.doneAt ? '<button class="btn" id="undo">Laatste ongedaan maken</button>' : ''}
+    ${s.last && (s.last.doneAt || (s.last.logs || []).length) ? '<button class="btn" id="undo">Laatste log ongedaan maken</button>' : ''}
     <button class="btn" id="edit">Aanpassen</button>`,
     () => {
-      $('#more').onclick = () => { closeSheet(); setTimeout(() => (t.goal ? doneSheet(t) : complete(t, null)), 250); };
+      $('#more').onclick = () => { closeSheet(); setTimeout(() => (t.goal || t.nextGoal || (s.last && s.last.goal && t.status === 'open') ? logSheet(t) : complete(t, null, true)), 250); };
+      $('#ngs').onclick = async () => { await api(`/tasks/${t.id}/next-goal`, 'POST', { goal: $('#ng').value }); closeSheet(); toast($('#ng').value ? `Volgende ronde: ${$('#ng').value}` : 'Standaarddoel hersteld'); load(); };
       if ($('#undo')) $('#undo').onclick = async () => { await api(`/tasks/${t.id}/undo`, 'POST'); closeSheet(); load(); };
       $('#edit').onclick = () => { closeSheet(); setTimeout(() => formSheet(t), 250); };
     });
@@ -352,6 +384,7 @@ function settingsSheet() {
   const link = `${location.origin}/wakker?key=${KEY}`;
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   openSheet(`<h3>Instellingen</h3><p class="sub">Meldingen en je wake-up link.</p>
+    <label>Je naam</label><input type="text" id="nm" maxlength="30" value="${esc(getName())}">
     <label>Meldingen</label>
     <button class="btn" id="en">${perm === 'granted' ? 'Meldingen staan aan ✓' : 'Meldingen aanzetten'}</button>
     <button class="btn" id="test">Stuur testmelding</button>
@@ -359,6 +392,7 @@ function settingsSheet() {
     <button class="btn" id="copy">Kopieer link</button>
     <button class="btn dng" id="out">Uitloggen op dit toestel</button>`,
     () => {
+      $('#nm').onchange = () => { try { localStorage.setItem('name', $('#nm').value.trim()); } catch {} render(); };
       $('#en').onclick = async () => { await enablePush(); settingsSheet(); };
       $('#test').onclick = async () => { const r = await api('/test', 'POST'); toast(r.apparaten ? 'Testmelding verstuurd' : 'Nog geen toestel gekoppeld, zet meldingen aan'); };
       $('#copy').onclick = async () => { try { await navigator.clipboard.writeText(link); toast('Link gekopieerd'); } catch { toast('Houd de link ingedrukt om te kopiëren'); } };
@@ -376,15 +410,22 @@ function toast(msg, undoFn) {
   undoTimer = setTimeout(() => el.classList.remove('on'), undoFn ? 6000 : 2600);
 }
 
-async function complete(t, amount, originEl) {
+async function complete(t, amount, finish, originEl) {
   const el = originEl || document.querySelector(`[data-id="${t.id}"] .check`);
   const r = el ? el.getBoundingClientRect() : { left: innerWidth / 2, top: innerHeight / 2, width: 0, height: 0 };
-  await api(`/tasks/${t.id}/done`, 'POST', { amount });
-  popId = t.id; await load();
-  confetti(r.left + r.width / 2, r.top + r.height / 2);
-  navigator.vibrate && navigator.vibrate([30, 40, 60]);
-  const s = stats(tasks.find((x) => x.id === t.id));
-  toast(s.cur > 1 ? `Gelogd 🔥 ${s.cur} op rij` : 'Gelogd. Lekker bezig.', async () => { await api(`/tasks/${t.id}/undo`, 'POST'); load(); });
+  const undo = async () => { await api(`/tasks/${t.id}/undo`, 'POST'); load(); };
+  const res = await api(`/tasks/${t.id}/log`, 'POST', { amount, finish });
+  const last = res.history[res.history.length - 1];
+  const closed = !!last.doneAt;
+  if (closed) popId = t.id;
+  await load();
+  navigator.vibrate && navigator.vibrate(closed ? [30, 40, 60] : 25);
+  if (closed && last.met !== false) {
+    confetti(r.left + r.width / 2, r.top + r.height / 2);
+    const s = stats(tasks.find((x) => x.id === t.id));
+    toast(s.cur > 1 ? `Doel gehaald 🔥 ${s.cur} op rij` : 'Doel gehaald. Lekker bezig.', undo);
+  } else if (closed) toast(`Afgerond: ${last.amount} van ${last.goal}. Morgen beter.`, undo);
+  else toast(`${last.amount} van ${last.goal} gelogd. Nog ${last.goal - last.amount} te gaan.`, undo);
 }
 
 const fx = $('#fx'), cx = fx.getContext('2d');
@@ -409,7 +450,8 @@ $('#list').addEventListener('click', (e) => {
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'check') {
     if (card.classList.contains('done')) return detailSheet(t);
-    t.goal ? doneSheet(t, card.querySelector('.check')) : complete(t, null, card.querySelector('.check'));
+    const s = stats(t), g = (t.status === 'open' && s.last && s.last.goal) || t.nextGoal || t.goal;
+    g ? logSheet(t, card.querySelector('.check')) : complete(t, null, true, card.querySelector('.check'));
   } else detailSheet(t);
 });
 $('#fab').onclick = () => formSheet();
