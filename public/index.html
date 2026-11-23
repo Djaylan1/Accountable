@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Accountable">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon.svg">
+<title>Accountable</title>
+<style>
+  :root { color-scheme: dark; --bg:#111; --card:#1c1c1e; --fg:#f2f2f2; --mut:#8e8e93; --ok:#4ade80; --warn:#fb923c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.4 -apple-system, system-ui, sans-serif;
+         padding: max(16px, env(safe-area-inset-top)) 16px 40px; max-width: 480px; margin-inline:auto; }
+  h1 { font-size: 28px; margin: 8px 0 16px; }
+  .card { background:var(--card); border-radius:14px; padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; }
+  .card .name { flex:1; font-weight:600; }
+  .card .sub { color:var(--mut); font-size:13px; font-weight:400; }
+  button { font:inherit; border:0; border-radius:10px; padding:10px 14px; background:#2c2c2e; color:var(--fg); }
+  button.go { background:var(--ok); color:#06210f; font-weight:700; }
+  button.x { background:none; color:var(--mut); padding:6px; }
+  .open { outline: 2px solid var(--warn); }
+  form { display:flex; gap:8px; margin:18px 0; }
+  input { flex:1; font:inherit; padding:12px; border-radius:10px; border:0; background:var(--card); color:var(--fg); }
+  .bar { background:var(--card); border-radius:14px; padding:12px 16px; margin-bottom:14px; color:var(--mut); font-size:14px; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<h1>Accountable</h1>
+<div id="setup" class="bar hide"></div>
+<div id="list"></div>
+<form id="add"><input id="name" placeholder="Nieuwe taak, bv. Push-ups" maxlength="80"><button class="go">+</button></form>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let KEY = localStorage.getItem('key') || new URLSearchParams(location.search).get('key');
+if (KEY) { localStorage.setItem('key', KEY); history.replaceState(null, '', '/'); }
+if (!KEY) { KEY = prompt('Sleutel (staat in de serverlog):'); if (KEY) localStorage.setItem('key', KEY); }
+
+const api = (p, o = {}) => fetch('/api' + p, { ...o, headers: { 'x-key': KEY, 'content-type': 'application/json' } }).then((r) => {
+  if (!r.ok) { if (r.status === 401) { localStorage.removeItem('key'); } throw new Error(r.status); }
+  return r.json();
+});
+
+async function closeNotifications(id) {
+  const reg = await navigator.serviceWorker.ready;
+  (await reg.getNotifications({ tag: 'task-' + id })).forEach((n) => n.close());
+}
+
+async function render() {
+  const tasks = await api('/tasks');
+  $('#list').innerHTML = '';
+  for (const t of tasks) {
+    const el = document.createElement('div');
+    el.className = 'card' + (t.status === 'open' ? ' open' : '');
+    el.innerHTML = `<div class="name">${t.name.replace(/[<>&]/g, '')}<div class="sub">${t.status === 'open' ? 'Nog te doen' : 'Gedaan / wacht op volgende wake-up'}</div></div>`;
+    if (t.status === 'open') {
+      const b = document.createElement('button'); b.className = 'go'; b.textContent = t.name + ' gedaan';
+      b.onclick = async () => { await api('/tasks/' + t.id + '/done', { method: 'POST' }); await closeNotifications(t.id); render(); };
+      el.append(b);
+    }
+    const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕';
+    x.onclick = async () => { if (confirm('Verwijderen?')) { await api('/tasks/' + t.id, { method: 'DELETE' }); await closeNotifications(t.id); render(); } };
+    el.append(x);
+    $('#list').append(el);
+  }
+  // Ruim meldingen op van taken die al klaar zijn
+  tasks.filter((t) => t.status !== 'open').forEach((t) => closeNotifications(t.id));
+}
+
+$('#add').onsubmit = async (e) => {
+  e.preventDefault();
+  const name = $('#name').value.trim(); if (!name) return;
+  await api('/tasks', { method: 'POST', body: JSON.stringify({ name }) });
+  $('#name').value = ''; render();
+};
+
+const b64 = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+
+async function setupPush() {
+  const bar = $('#setup');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    bar.classList.remove('hide');
+    bar.textContent = 'Meldingen werken pas als je deze pagina via Delen → "Zet op beginscherm" toevoegt en daar opent (iOS 16.4+).';
+    return;
+  }
+  const reg = await navigator.serviceWorker.register('/sw.js');
+  const existing = await reg.pushManager.getSubscription();
+  if (existing && Notification.permission === 'granted') { await api('/subscribe', { method: 'POST', body: JSON.stringify(existing) }); return; }
+  bar.classList.remove('hide');
+  bar.innerHTML = '<button class="go" id="en">Meldingen aanzetten</button>';
+  $('#en').onclick = async () => {
+    if (await Notification.requestPermission() !== 'granted') return;
+    const { publicKey } = await fetch('/api/vapid').then((r) => r.json());
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(publicKey) });
+    await api('/subscribe', { method: 'POST', body: JSON.stringify(sub) });
+    bar.classList.add('hide');
+  };
+}
+
+render().catch(() => {});
+setupPush().catch(console.error);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render().catch(() => {}); });
+</script>
+</body>
+</html>
