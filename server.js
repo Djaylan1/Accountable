@@ -49,7 +49,7 @@ async function init() {
   } else {
     try { saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch {}
   }
-  db.tasks = saved.tasks || [];
+  db.tasks = (saved.tasks || []).map((t) => ({ goal: null, unit: '', emoji: '', history: [], ...t }));
   db.subs = saved.subs || [];
   db.key = process.env.APP_KEY || saved.key || crypto.randomBytes(12).toString('hex');
   db.vapid = process.env.VAPID_PUBLIC
@@ -91,22 +91,59 @@ app.get('/api/vapid', (_, res) => res.json({ publicKey: db.vapid.publicKey }));
 
 app.get('/api/tasks', auth, (_, res) => res.json(db.tasks));
 
+const cleanFields = (b) => ({
+  name: String(b.name || '').trim().slice(0, 80),
+  goal: Number(b.goal) > 0 ? Math.min(Number(b.goal), 100000) : null,
+  unit: String(b.unit || '').trim().slice(0, 20),
+  emoji: String(b.emoji || '').trim().slice(0, 4),
+});
+
 app.post('/api/tasks', auth, (req, res) => {
-  const name = String(req.body.name || '').trim().slice(0, 80);
-  if (!name) return res.status(400).json({ error: 'naam ontbreekt' });
-  const t = { id: crypto.randomUUID(), name, status: 'done', firedAt: null, remindAt: null, reminded: false };
+  const f = cleanFields(req.body);
+  if (!f.name) return res.status(400).json({ error: 'naam ontbreekt' });
+  const t = { id: crypto.randomUUID(), ...f, status: 'done', firedAt: null, remindAt: null, reminded: false, history: [] };
   db.tasks.push(t); save(); res.json(t);
+});
+
+app.patch('/api/tasks/:id', auth, (req, res) => {
+  const t = db.tasks.find((x) => x.id === req.params.id);
+  if (!t) return res.status(404).json({ error: 'onbekend' });
+  const f = cleanFields({ ...t, ...req.body });
+  if (!f.name) return res.status(400).json({ error: 'naam ontbreekt' });
+  Object.assign(t, f); save(); res.json(t);
 });
 
 app.delete('/api/tasks/:id', auth, (req, res) => {
   db.tasks = db.tasks.filter((t) => t.id !== req.params.id); save(); res.json({ ok: true });
 });
 
+// Afvinken: sluit de lopende ronde af, of logt een losse (handmatige) ronde.
 app.post('/api/tasks/:id/done', auth, (req, res) => {
   const t = db.tasks.find((x) => x.id === req.params.id);
   if (!t) return res.status(404).json({ error: 'onbekend' });
+  const now = Date.now();
+  const amount = Number(req.body?.amount) > 0 ? Number(req.body.amount) : null;
+  const last = t.history[t.history.length - 1];
+  if (t.status === 'open' && last && !last.doneAt) Object.assign(last, { doneAt: now, amount });
+  else t.history.push({ firedAt: now, doneAt: now, amount, manual: true });
   Object.assign(t, { status: 'done', remindAt: null });
   save(); res.json(t);
+});
+
+// Per ongeluk afgevinkt? Haal de laatste voltooiing terug.
+app.post('/api/tasks/:id/undo', auth, (req, res) => {
+  const t = db.tasks.find((x) => x.id === req.params.id);
+  const last = t && t.history[t.history.length - 1];
+  if (!last || !last.doneAt) return res.status(400).json({ error: 'niets om terug te zetten' });
+  if (last.manual) t.history.pop();
+  else Object.assign(last, { doneAt: null, amount: null });
+  if (!last.manual) Object.assign(t, { status: 'open', remindAt: Date.now() + REMIND_AFTER_MIN * 60e3, reminded: false });
+  save(); res.json(t);
+});
+
+app.post('/api/test', auth, async (_, res) => {
+  await push({ tag: 'test', title: 'Testmelding', body: 'Meldingen werken. Je bent klaar voor de volgende wake-up.' });
+  res.json({ ok: true, apparaten: db.subs.length });
 });
 
 app.post('/api/subscribe', auth, (req, res) => {
@@ -123,6 +160,8 @@ async function wakker(req, res) {
   for (const t of db.tasks) {
     if (t.firedAt && now - t.firedAt < DEDUPE_HOURS * 3600e3) continue;
     Object.assign(t, { status: 'open', firedAt: now, remindAt: now + REMIND_AFTER_MIN * 60e3, reminded: false });
+    t.history.push({ firedAt: now, doneAt: null, amount: null });
+    if (t.history.length > 200) t.history.shift();
     fired.push(t);
   }
   save();

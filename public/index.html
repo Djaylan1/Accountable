@@ -4,105 +4,440 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Accountable">
+<meta name="theme-color" content="#0a0a0b">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <title>Accountable</title>
 <style>
-  :root { color-scheme: dark; --bg:#111; --card:#1c1c1e; --fg:#f2f2f2; --mut:#8e8e93; --ok:#4ade80; --warn:#fb923c; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.4 -apple-system, system-ui, sans-serif;
-         padding: max(16px, env(safe-area-inset-top)) 16px 40px; max-width: 480px; margin-inline:auto; }
-  h1 { font-size: 28px; margin: 8px 0 16px; }
-  .card { background:var(--card); border-radius:14px; padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; }
-  .card .name { flex:1; font-weight:600; }
-  .card .sub { color:var(--mut); font-size:13px; font-weight:400; }
-  button { font:inherit; border:0; border-radius:10px; padding:10px 14px; background:#2c2c2e; color:var(--fg); }
-  button.go { background:var(--ok); color:#06210f; font-weight:700; }
-  button.x { background:none; color:var(--mut); padding:6px; }
-  .open { outline: 2px solid var(--warn); }
-  form { display:flex; gap:8px; margin:18px 0; }
-  input { flex:1; font:inherit; padding:12px; border-radius:10px; border:0; background:var(--card); color:var(--fg); }
-  .bar { background:var(--card); border-radius:14px; padding:12px 16px; margin-bottom:14px; color:var(--mut); font-size:14px; }
-  .hide { display:none; }
+:root {
+  --bg:#0a0a0b; --s1:#131315; --s2:#1b1b1e; --s3:#26262a; --line:rgba(255,255,255,.08);
+  --fg:#f5f5f0; --mut:#8d8d96; --acc:#d4ff3a; --acc-ink:#142000; --ember:#ff6a2b; --bad:#ff4d5e;
+  --ease:cubic-bezier(.22,1,.36,1); --spring:cubic-bezier(.34,1.56,.64,1);
+  --display:'Barlow Condensed','Arial Narrow',system-ui,sans-serif;
+  --body:'Inter',-apple-system,system-ui,sans-serif;
+}
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html { background:var(--bg); }
+body {
+  margin:0; color:var(--fg); font:16px/1.45 var(--body); min-height:100dvh;
+  background:
+    radial-gradient(900px 500px at 85% -10%, rgba(212,255,58,.10), transparent 60%),
+    radial-gradient(700px 500px at -10% 30%, rgba(255,106,43,.07), transparent 60%),
+    var(--bg);
+  padding:max(18px, env(safe-area-inset-top)) 18px calc(120px + env(safe-area-inset-bottom));
+  max-width:520px; margin-inline:auto; overflow-x:hidden;
+}
+body::before { /* korrel voor een tastbare, niet-vlakke look */
+  content:""; position:fixed; inset:0; pointer-events:none; opacity:.05; mix-blend-mode:overlay; z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+body > * { position:relative; z-index:1; }
+button { font:inherit; color:inherit; border:0; background:none; cursor:pointer; transition:transform .25s var(--ease), background .2s, opacity .2s; }
+button:active { transform:scale(.96); }
+
+/* header */
+.top { display:flex; align-items:flex-start; justify-content:space-between; padding-top:6px; }
+.eyebrow { font:600 12px var(--body); letter-spacing:.16em; text-transform:uppercase; color:var(--mut); }
+h1 { font:800 44px/0.95 var(--display); letter-spacing:.01em; text-transform:uppercase; margin:6px 0 0; }
+h1 em { font-style:normal; color:var(--acc); }
+.icon-btn { width:44px; height:44px; border-radius:14px; background:var(--s1); border:1px solid var(--line); display:grid; place-items:center; }
+.icon-btn svg { width:20px; height:20px; stroke:var(--fg); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+
+/* hero */
+.hero { display:flex; align-items:center; gap:18px; margin:22px 0 26px; padding:18px; border-radius:22px;
+  background:linear-gradient(145deg, var(--s2), var(--s1)); border:1px solid var(--line); overflow:hidden; position:relative; }
+.hero::after { content:""; position:absolute; right:-40px; top:-40px; width:160px; height:160px; border-radius:50%;
+  background:radial-gradient(circle, rgba(212,255,58,.16), transparent 70%); }
+.ring { width:84px; height:84px; flex:none; transform:rotate(-90deg); }
+.ring circle { fill:none; stroke-width:9; stroke-linecap:round; }
+.ring .bg { stroke:var(--s3); }
+.ring .fg { stroke:var(--acc); stroke-dasharray:238.8; stroke-dashoffset:238.8; transition:stroke-dashoffset 1.1s var(--ease); filter:drop-shadow(0 0 6px rgba(212,255,58,.5)); }
+.ringwrap { position:relative; width:84px; height:84px; flex:none; }
+.ringnum { position:absolute; inset:0; display:grid; place-items:center; font:800 28px var(--display); }
+.hero h2 { margin:0; font:700 24px/1.1 var(--display); text-transform:uppercase; letter-spacing:.02em; }
+.hero p { margin:4px 0 0; color:var(--mut); font-size:14px; }
+
+/* kaarten */
+.cards { display:grid; gap:12px; }
+.card { position:relative; display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:center; padding:16px; border-radius:20px;
+  background:var(--s1); border:1px solid var(--line); text-align:left; width:100%;
+  opacity:0; transform:translateY(18px) scale(.98); animation:enter .7s var(--ease) forwards; animation-delay:calc(var(--i) * 70ms); }
+.card.open { border-color:rgba(255,106,43,.55); background:linear-gradient(160deg, rgba(255,106,43,.10), var(--s1) 55%); animation:enter .7s var(--ease) forwards, glow 2.4s ease-in-out infinite; animation-delay:calc(var(--i) * 70ms), 0s; }
+.card.done .name { color:var(--fg); }
+.card.pop { animation:enter .01s forwards, cardpop .7s var(--spring); opacity:1; transform:none; }
+@keyframes enter { to { opacity:1; transform:none; } }
+@keyframes glow { 0%,100% { box-shadow:0 0 0 0 rgba(255,106,43,0); } 50% { box-shadow:0 0 28px 0 rgba(255,106,43,.22); } }
+@keyframes cardpop { 0% { transform:scale(.96); box-shadow:0 0 0 0 rgba(212,255,58,.5); } 40% { transform:scale(1.025); box-shadow:0 0 40px 6px rgba(212,255,58,.28); } 100% { transform:scale(1); box-shadow:0 0 0 0 rgba(212,255,58,0); } }
+
+.check { position:relative; width:66px; height:66px; border-radius:50%; display:grid; place-items:center; background:var(--s2); border:2px solid var(--s3); }
+.check svg { width:30px; height:30px; fill:none; stroke:var(--mut); stroke-width:3.2; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:30; stroke-dashoffset:30; transition:stroke-dashoffset .5s var(--ease) .1s, stroke .2s; }
+.card.open .check { border-color:var(--ember); background:rgba(255,106,43,.12); }
+.card.open .check::after { content:""; position:absolute; inset:-8px; border-radius:50%; border:2px solid var(--ember); animation:pulse 1.8s ease-out infinite; }
+.card.open .check svg { stroke:var(--ember); stroke-dashoffset:0; }
+.card.done .check { background:var(--acc); border-color:var(--acc); box-shadow:0 0 24px rgba(212,255,58,.3); }
+.card.done .check svg { stroke:var(--acc-ink); stroke-dashoffset:0; }
+.card.idle .check svg { stroke-dashoffset:0; opacity:.5; }
+.card.pop .check svg { animation:draw .55s var(--ease) .15s backwards; }
+@keyframes pulse { 0% { transform:scale(.85); opacity:.8; } 100% { transform:scale(1.35); opacity:0; } }
+@keyframes draw { from { stroke-dashoffset:30; } to { stroke-dashoffset:0; } }
+
+.body { min-width:0; cursor:pointer; }
+.name { font:700 24px/1.05 var(--display); letter-spacing:.015em; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.meta { display:flex; flex-wrap:wrap; gap:6px 8px; margin-top:7px; align-items:center; }
+.chip { font:600 12px var(--body); padding:3px 9px; border-radius:99px; background:var(--s2); border:1px solid var(--line); color:#cfcfd6; }
+.chip.fire { color:#ffb38a; border-color:rgba(255,106,43,.4); background:rgba(255,106,43,.1); }
+.status { margin-top:7px; font-size:13px; color:var(--mut); }
+.card.open .status { color:#ffb38a; }
+.dots { display:flex; gap:4px; margin-top:9px; }
+.dots i { width:9px; height:9px; border-radius:3px; background:var(--s3); }
+.dots i.y { background:var(--acc); }
+.dots i.n { background:transparent; border:1.5px solid #4a4a52; }
+.dots i.o { background:var(--ember); animation:blink 1.2s infinite; }
+@keyframes blink { 50% { opacity:.35; } }
+
+.empty { text-align:center; padding:40px 10px; color:var(--mut); }
+.empty svg { width:120px; height:120px; margin-bottom:10px; }
+.empty h3 { font:800 30px var(--display); text-transform:uppercase; color:var(--fg); margin:0 0 6px; }
+
+/* FAB */
+.fab { position:fixed; right:max(18px, calc(50% - 242px)); bottom:calc(22px + env(safe-area-inset-bottom)); z-index:20;
+  height:60px; padding:0 24px 0 18px; border-radius:30px; background:var(--acc); color:var(--acc-ink); display:flex; align-items:center; gap:8px;
+  font:800 20px var(--display); text-transform:uppercase; letter-spacing:.04em; box-shadow:0 10px 30px rgba(212,255,58,.28), 0 0 0 1px rgba(0,0,0,.2) inset; animation:fabin .8s var(--spring) .4s backwards; }
+.fab svg { width:24px; height:24px; stroke:currentColor; stroke-width:3; fill:none; stroke-linecap:round; }
+@keyframes fabin { from { transform:translateY(100px) scale(.8); opacity:0; } }
+
+/* sheets */
+.backdrop { position:fixed; inset:0; z-index:40; background:rgba(0,0,0,.55); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); opacity:0; pointer-events:none; transition:opacity .35s; }
+.backdrop.on { opacity:1; pointer-events:auto; }
+.sheet { position:fixed; left:0; right:0; bottom:0; z-index:41; max-width:520px; margin:0 auto; max-height:88dvh; overflow:auto;
+  background:var(--s1); border:1px solid var(--line); border-bottom:0; border-radius:28px 28px 0 0; padding:10px 20px calc(24px + env(safe-area-inset-bottom));
+  transform:translateY(105%); transition:transform .55s var(--ease); }
+.sheet.on { transform:none; }
+.grab { width:40px; height:5px; border-radius:3px; background:var(--s3); margin:0 auto 16px; }
+.sheet h3 { font:800 34px/1 var(--display); text-transform:uppercase; margin:0 0 4px; }
+.sheet .sub { color:var(--mut); margin:0 0 18px; font-size:14px; }
+.btn { width:100%; height:56px; border-radius:16px; font:800 21px var(--display); text-transform:uppercase; letter-spacing:.05em; background:var(--s2); border:1px solid var(--line); margin-top:10px; }
+.btn.pri { background:var(--acc); color:var(--acc-ink); border:0; box-shadow:0 8px 24px rgba(212,255,58,.22); }
+.btn.dng { color:var(--bad); }
+.row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+label { display:block; font:600 12px var(--body); letter-spacing:.12em; text-transform:uppercase; color:var(--mut); margin:14px 0 6px; }
+input[type=text], input[type=number] { width:100%; height:52px; border-radius:14px; border:1px solid var(--line); background:var(--s2); color:var(--fg); font:500 17px var(--body); padding:0 14px; outline:none; transition:border-color .2s, box-shadow .2s; }
+input:focus { border-color:var(--acc); box-shadow:0 0 0 3px rgba(212,255,58,.15); }
+.emojis { display:flex; gap:8px; flex-wrap:wrap; }
+.emojis button { width:46px; height:46px; border-radius:14px; background:var(--s2); border:1px solid var(--line); font-size:22px; }
+.emojis button.sel { border-color:var(--acc); background:rgba(212,255,58,.12); transform:scale(1.08); }
+
+.stepper { display:flex; align-items:center; justify-content:center; gap:18px; margin:10px 0 6px; }
+.stepper button { width:64px; height:64px; border-radius:50%; background:var(--s2); border:1px solid var(--line); font:700 34px var(--display); }
+.stepper .val { min-width:130px; text-align:center; }
+.stepper .val b { display:block; font:800 80px/0.9 var(--display); color:var(--acc); }
+.stepper .val span { color:var(--mut); font-size:14px; }
+
+.stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:10px 0 6px; }
+.stat { background:var(--s2); border:1px solid var(--line); border-radius:16px; padding:12px; text-align:center; }
+.stat b { display:block; font:800 36px/1 var(--display); }
+.stat span { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--mut); }
+.hist { margin-top:12px; display:grid; gap:2px; }
+.hist div { display:flex; justify-content:space-between; padding:10px 2px; border-bottom:1px solid var(--line); font-size:14px; }
+.hist .ok { color:var(--acc); } .hist .miss { color:var(--mut); }
+.copybox { word-break:break-all; font:13px/1.4 ui-monospace,monospace; background:var(--s2); border:1px solid var(--line); padding:12px; border-radius:12px; color:#cfcfd6; }
+
+/* toast */
+.toast { position:fixed; left:50%; bottom:calc(100px + env(safe-area-inset-bottom)); z-index:60; transform:translate(-50%,30px); opacity:0; pointer-events:none;
+  background:#f5f5f0; color:#111; padding:12px 16px; border-radius:16px; display:flex; gap:14px; align-items:center; font-weight:600; box-shadow:0 14px 40px rgba(0,0,0,.5); transition:all .5s var(--spring); white-space:nowrap; }
+.toast.on { opacity:1; transform:translate(-50%,0); pointer-events:auto; }
+.toast button { color:#2b6b00; font-weight:700; }
+#fx { position:fixed; inset:0; pointer-events:none; z-index:80; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
 </style>
 </head>
 <body>
-<h1>Accountable</h1>
-<div id="setup" class="bar hide"></div>
-<div id="list"></div>
-<form id="add"><input id="name" placeholder="Nieuwe taak, bv. Push-ups" maxlength="80"><button class="go">+</button></form>
+
+<div class="top">
+  <div><div class="eyebrow" id="date"></div><h1 id="greet"></h1></div>
+  <button class="icon-btn" id="gear" aria-label="Instellingen">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</div>
+
+<section class="hero" id="hero">
+  <div class="ringwrap">
+    <svg class="ring" viewBox="0 0 84 84"><circle class="bg" cx="42" cy="42" r="38"/><circle class="fg" id="ringfg" cx="42" cy="42" r="38"/></svg>
+    <div class="ringnum" id="ringnum">0</div>
+  </div>
+  <div><h2 id="heroT">Laden…</h2><p id="heroP"></p></div>
+</section>
+
+<main class="cards" id="list"></main>
+
+<button class="fab" id="fab"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Nieuwe gewoonte</button>
+
+<div class="backdrop" id="bd"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+<div class="toast" id="toast"></div>
+<canvas id="fx"></canvas>
 
 <script>
 const $ = (s) => document.querySelector(s);
-let KEY = localStorage.getItem('key') || new URLSearchParams(location.search).get('key');
-if (KEY) { localStorage.setItem('key', KEY); history.replaceState(null, '', '/'); }
-if (!KEY) { KEY = prompt('Sleutel (staat in de serverlog):'); if (KEY) localStorage.setItem('key', KEY); }
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const api = (p, o = {}) => fetch('/api' + p, { ...o, headers: { 'x-key': KEY, 'content-type': 'application/json' } }).then((r) => {
-  if (!r.ok) { if (r.status === 401) { localStorage.removeItem('key'); } throw new Error(r.status); }
+/* ---------- sleutel & API ---------- */
+let KEY = localStorage.getItem('key');
+const qk = new URLSearchParams(location.search).get('key');
+if (qk) { KEY = qk; localStorage.setItem('key', qk); history.replaceState(null, '', '/'); }
+
+async function api(path, method = 'GET', body) {
+  const r = await fetch('/api' + path, { method, headers: { 'x-key': KEY || '', 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401) { localStorage.removeItem('key'); KEY = null; askKey(); throw new Error('401'); }
+  if (!r.ok) throw new Error(r.status);
   return r.json();
-});
-
-async function closeNotifications(id) {
-  const reg = await navigator.serviceWorker.ready;
-  (await reg.getNotifications({ tag: 'task-' + id })).forEach((n) => n.close());
 }
 
-async function render() {
-  const tasks = await api('/tasks');
-  $('#list').innerHTML = '';
-  for (const t of tasks) {
-    const el = document.createElement('div');
-    el.className = 'card' + (t.status === 'open' ? ' open' : '');
-    el.innerHTML = `<div class="name">${t.name.replace(/[<>&]/g, '')}<div class="sub">${t.status === 'open' ? 'Nog te doen' : 'Gedaan / wacht op volgende wake-up'}</div></div>`;
-    if (t.status === 'open') {
-      const b = document.createElement('button'); b.className = 'go'; b.textContent = t.name + ' gedaan';
-      b.onclick = async () => { await api('/tasks/' + t.id + '/done', { method: 'POST' }); await closeNotifications(t.id); render(); };
-      el.append(b);
-    }
-    const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕';
-    x.onclick = async () => { if (confirm('Verwijderen?')) { await api('/tasks/' + t.id, { method: 'DELETE' }); await closeNotifications(t.id); render(); } };
-    el.append(x);
-    $('#list').append(el);
-  }
-  // Ruim meldingen op van taken die al klaar zijn
-  tasks.filter((t) => t.status !== 'open').forEach((t) => closeNotifications(t.id));
-}
-
-$('#add').onsubmit = async (e) => {
-  e.preventDefault();
-  const name = $('#name').value.trim(); if (!name) return;
-  await api('/tasks', { method: 'POST', body: JSON.stringify({ name }) });
-  $('#name').value = ''; render();
+/* ---------- helpers ---------- */
+const DAY = 864e5;
+const fmtTime = (ts) => new Date(ts).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+const fmtDay = (ts) => {
+  const d = new Date(ts), n = new Date(), s = (x) => new Date(x).setHours(0,0,0,0);
+  const diff = Math.round((s(n) - s(d)) / DAY);
+  if (diff === 0) return 'Vandaag'; if (diff === 1) return 'Gisteren';
+  return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
-const b64 = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
-
-async function setupPush() {
-  const bar = $('#setup');
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    bar.classList.remove('hide');
-    bar.textContent = 'Meldingen werken pas als je deze pagina via Delen → "Zet op beginscherm" toevoegt en daar opent (iOS 16.4+).';
-    return;
-  }
-  const reg = await navigator.serviceWorker.register('/sw.js');
-  const existing = await reg.pushManager.getSubscription();
-  if (existing && Notification.permission === 'granted') { await api('/subscribe', { method: 'POST', body: JSON.stringify(existing) }); return; }
-  bar.classList.remove('hide');
-  bar.innerHTML = '<button class="go" id="en">Meldingen aanzetten</button>';
-  $('#en').onclick = async () => {
-    if (await Notification.requestPermission() !== 'granted') return;
-    const { publicKey } = await fetch('/api/vapid').then((r) => r.json());
-    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(publicKey) });
-    await api('/subscribe', { method: 'POST', body: JSON.stringify(sub) });
-    bar.classList.add('hide');
-  };
+function stats(t) {
+  const h = t.history || [];
+  let i = h.length - 1;
+  if (i >= 0 && !h[i].doneAt && t.status === 'open') i--;
+  let cur = 0; for (; i >= 0 && h[i].doneAt; i--) cur++;
+  let best = 0, run = 0;
+  for (const e of h) { if (e.doneAt) { run++; best = Math.max(best, run); } else run = 0; }
+  const total = h.filter((e) => e.doneAt).length;
+  const amount = h.reduce((a, e) => a + (e.doneAt ? e.amount || 0 : 0), 0);
+  const last = h[h.length - 1];
+  const doneRecent = !!(last && last.doneAt && t.status !== 'open' && Date.now() - last.doneAt < 18 * 3600e3);
+  return { cur, best, total, amount, last, doneRecent };
 }
 
-render().catch(() => {});
-setupPush().catch(console.error);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) render().catch(() => {}); });
+function countUp(el, to, ms = 900) {
+  if (reduced) { el.textContent = to; return; }
+  const from = Number(el.dataset.v || 0), t0 = performance.now();
+  el.dataset.v = to;
+  const step = (t) => { const p = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - p, 3); el.textContent = Math.round(from + (to - from) * e); if (p < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+
+/* ---------- state & render ---------- */
+let tasks = [], firstRender = true, popId = null;
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 5 ? 'Goede<em>nacht</em>' : h < 12 ? 'Goede<em>morgen</em>' : h < 18 ? 'Goede<em>middag</em>' : 'Goede<em>avond</em>';
+}
+
+function render() {
+  $('#date').textContent = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+  $('#greet').innerHTML = greeting();
+
+  const S = tasks.map((t) => ({ t, s: stats(t) }));
+  const open = S.filter((x) => x.t.status === 'open').length;
+  const done = S.filter((x) => x.s.doneRecent).length;
+  const denom = open + done;
+  const frac = denom ? done / denom : 0;
+  $('#ringfg').style.strokeDashoffset = 238.8 * (1 - frac);
+  countUp($('#ringnum'), open || done);
+  const T = $('#heroT'), P = $('#heroP');
+  if (!tasks.length) { T.textContent = 'Nog niks gepland'; P.textContent = 'Voeg je eerste gewoonte toe.'; $('#ringnum').textContent = '–'; }
+  else if (open) { T.textContent = open === 1 ? 'Nog 1 te doen' : `Nog ${open} te doen`; P.textContent = 'Tik op de cirkel zodra het gedaan is.'; }
+  else if (done) { T.textContent = 'Alles gedaan'; P.textContent = 'Sterk. Rust maar uit tot je volgende wake-up.'; }
+  else { T.textContent = 'Rustig aan'; P.textContent = 'Je melding komt zodra je wekker uitgaat.'; }
+
+  const list = $('#list');
+  if (!tasks.length) {
+    list.innerHTML = `<div class="empty"><svg viewBox="0 0 120 120" fill="none" stroke="#d4ff3a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="60" cy="60" r="46" stroke="#26262a" stroke-width="8"/><path d="M38 62l15 15 30-34"/></svg><h3>Begin vandaag</h3><div>Een gewoonte, een melding, geen excuses.</div></div>`;
+    return;
+  }
+  list.innerHTML = S.map(({ t, s }, i) => {
+    const st = t.status === 'open' ? 'open' : s.doneRecent ? 'done' : 'idle';
+    const recent = (t.history || []).slice(-10);
+    const dots = recent.map((e, j) => `<i class="${e.doneAt ? 'y' : (j === recent.length - 1 && t.status === 'open') ? 'o' : 'n'}"></i>`).join('');
+    const status = st === 'open' ? `Wacht op je sinds ${fmtTime(s.last.firedAt)}`
+      : st === 'done' ? `Gedaan om ${fmtTime(s.last.doneAt)}${s.last.amount ? ' · ' + s.last.amount + (t.unit ? ' ' + esc(t.unit) : '') : ''}`
+      : s.last ? `Laatst gedaan ${fmtDay(s.last.doneAt || s.last.firedAt).toLowerCase()}` : 'Wacht op je eerste wake-up';
+    return `<article class="card ${st}${popId === t.id ? ' pop' : ''}" style="--i:${firstRender ? i : 0}" data-id="${t.id}">
+      <button class="check" data-act="check" aria-label="Markeer ${esc(t.name)} als gedaan"><svg viewBox="0 0 30 30"><path d="M6 16l6 6 12-14"/></svg></button>
+      <div class="body" data-act="detail">
+        <div class="name">${t.emoji ? esc(t.emoji) + ' ' : ''}${esc(t.name)}</div>
+        <div class="meta">${t.goal ? `<span class="chip">${t.goal} ${esc(t.unit)}</span>` : ''}${s.cur ? `<span class="chip fire">🔥 ${s.cur} op rij</span>` : ''}</div>
+        <div class="status">${status}</div>
+        <div class="dots">${dots}</div>
+      </div></article>`;
+  }).join('');
+  firstRender = false; popId = null;
+}
+
+async function load() { tasks = await api('/tasks'); render(); }
+
+/* ---------- sheets ---------- */
+const sheet = $('#sheet'), bd = $('#bd');
+function openSheet(html, after) { sheet.innerHTML = '<div class="grab"></div>' + html; sheet.scrollTop = 0; bd.classList.add('on'); requestAnimationFrame(() => sheet.classList.add('on')); after && after(); }
+function closeSheet() { sheet.classList.remove('on'); bd.classList.remove('on'); }
+bd.onclick = closeSheet;
+let dragY = null;
+sheet.addEventListener('touchstart', (e) => { if (sheet.scrollTop <= 0) dragY = e.touches[0].clientY; }, { passive: true });
+sheet.addEventListener('touchmove', (e) => { if (dragY == null) return; const d = e.touches[0].clientY - dragY; if (d > 0) { sheet.style.transition = 'none'; sheet.style.transform = `translateY(${d}px)`; } }, { passive: true });
+sheet.addEventListener('touchend', (e) => { if (dragY == null) return; const d = e.changedTouches[0].clientY - dragY; sheet.style.transition = ''; sheet.style.transform = ''; if (d > 110) closeSheet(); dragY = null; });
+
+function askKey() {
+  openSheet(`<h3>Sleutel nodig</h3><p class="sub">Plak je persoonlijke sleutel om je gewoontes te openen.</p><label>Sleutel</label><input type="text" id="k" autocapitalize="off" autocomplete="off"><button class="btn pri" id="kok">Openen</button>`,
+    () => { $('#kok').onclick = () => { KEY = $('#k').value.trim(); localStorage.setItem('key', KEY); closeSheet(); load().catch(() => {}); }; });
+}
+
+function formSheet(t) {
+  const E = ['💪','🏃','🧘','📖','💧','🥗','😴','✍️'];
+  let emoji = t?.emoji || '';
+  openSheet(`<h3>${t ? 'Aanpassen' : 'Nieuwe gewoonte'}</h3><p class="sub">Wat ga je elke wake-up doen?</p>
+    <label>Kies een icoon</label><div class="emojis">${E.map((e) => `<button type="button" data-e="${e}" class="${e === emoji ? 'sel' : ''}">${e}</button>`).join('')}</div>
+    <label>Naam</label><input type="text" id="fname" maxlength="80" placeholder="Push-ups" value="${esc(t?.name || '')}">
+    <div class="row2"><div><label>Doel (optioneel)</label><input type="number" id="fgoal" inputmode="numeric" min="1" placeholder="30" value="${t?.goal || ''}"></div>
+    <div><label>Eenheid</label><input type="text" id="funit" maxlength="20" placeholder="herhalingen" value="${esc(t?.unit || '')}"></div></div>
+    <button class="btn pri" id="fsave">${t ? 'Opslaan' : 'Toevoegen'}</button>${t ? '<button class="btn dng" id="fdel">Verwijderen</button>' : ''}`,
+    () => {
+      sheet.querySelectorAll('[data-e]').forEach((b) => b.onclick = () => { emoji = emoji === b.dataset.e ? '' : b.dataset.e; sheet.querySelectorAll('[data-e]').forEach((x) => x.classList.toggle('sel', x.dataset.e === emoji)); });
+      $('#fsave').onclick = async () => {
+        const body = { name: $('#fname').value, goal: $('#fgoal').value, unit: $('#funit').value, emoji };
+        if (!body.name.trim()) { $('#fname').focus(); return; }
+        await api(t ? '/tasks/' + t.id : '/tasks', t ? 'PATCH' : 'POST', body); closeSheet(); load();
+      };
+      if (t) $('#fdel').onclick = async () => { if (confirm(`"${t.name}" en alle geschiedenis verwijderen?`)) { await api('/tasks/' + t.id, 'DELETE'); closeSheet(); load(); } };
+    });
+}
+
+function doneSheet(t, originEl) {
+  let n = t.goal || 1;
+  openSheet(`<h3>${esc(t.name)}</h3><p class="sub">Hoeveel heb je gedaan?</p>
+    <div class="stepper"><button id="m" aria-label="Minder">−</button><div class="val"><b id="n">${n}</b><span>${esc(t.unit || 'keer')}</span></div><button id="p" aria-label="Meer">+</button></div>
+    <button class="btn pri" id="ok">Gedaan ✓</button><button class="btn" id="skip">Zonder aantal loggen</button>`,
+    () => {
+      const step = t.goal >= 50 ? 5 : 1, upd = () => $('#n').textContent = n;
+      $('#m').onclick = () => { n = Math.max(1, n - step); upd(); };
+      $('#p').onclick = () => { n += step; upd(); };
+      $('#ok').onclick = () => { closeSheet(); complete(t, n, originEl); };
+      $('#skip').onclick = () => { closeSheet(); complete(t, null, originEl); };
+    });
+}
+
+function detailSheet(t) {
+  const s = stats(t), h = [...(t.history || [])].reverse().slice(0, 12);
+  openSheet(`<h3>${t.emoji ? esc(t.emoji) + ' ' : ''}${esc(t.name)}</h3><p class="sub">${t.goal ? `Doel: ${t.goal} ${esc(t.unit)}` : 'Geen vast doel'}</p>
+    <div class="stats"><div class="stat"><b>${s.cur}</b><span>Op rij</span></div><div class="stat"><b>${s.best}</b><span>Record</span></div><div class="stat"><b>${s.total}</b><span>Totaal</span></div></div>
+    ${s.amount ? `<p class="sub" style="text-align:center;margin:8px 0 0">In totaal <b style="color:var(--acc)">${s.amount}</b> ${esc(t.unit)}</p>` : ''}
+    <div class="hist">${h.length ? h.map((e) => `<div><span>${fmtDay(e.firedAt)} · ${fmtTime(e.firedAt)}</span><span class="${e.doneAt ? 'ok' : 'miss'}">${e.doneAt ? '✓ ' + (e.amount ? e.amount + ' ' + esc(t.unit) : 'gedaan') : (t.status === 'open' && e === t.history[t.history.length - 1] ? 'open' : 'gemist')}</span></div>`).join('') : '<div><span>Nog geen geschiedenis</span></div>'}</div>
+    <button class="btn pri" id="more">+ Nu loggen</button>
+    ${s.last && s.last.doneAt ? '<button class="btn" id="undo">Laatste ongedaan maken</button>' : ''}
+    <button class="btn" id="edit">Aanpassen</button>`,
+    () => {
+      $('#more').onclick = () => { closeSheet(); setTimeout(() => (t.goal ? doneSheet(t) : complete(t, null)), 250); };
+      if ($('#undo')) $('#undo').onclick = async () => { await api(`/tasks/${t.id}/undo`, 'POST'); closeSheet(); load(); };
+      $('#edit').onclick = () => { closeSheet(); setTimeout(() => formSheet(t), 250); };
+    });
+}
+
+function settingsSheet() {
+  const link = `${location.origin}/wakker?key=${KEY}`;
+  const perm = 'Notification' in window ? Notification.permission : 'unsupported';
+  openSheet(`<h3>Instellingen</h3><p class="sub">Meldingen en je wake-up link.</p>
+    <label>Meldingen</label>
+    <button class="btn" id="en">${perm === 'granted' ? 'Meldingen staan aan ✓' : 'Meldingen aanzetten'}</button>
+    <button class="btn" id="test">Stuur testmelding</button>
+    <label>Wake-up link (voor Opdrachten)</label><div class="copybox" id="lnk">${esc(link)}</div>
+    <button class="btn" id="copy">Kopieer link</button>
+    <button class="btn dng" id="out">Uitloggen op dit toestel</button>`,
+    () => {
+      $('#en').onclick = async () => { await enablePush(); settingsSheet(); };
+      $('#test').onclick = async () => { const r = await api('/test', 'POST'); toast(r.apparaten ? 'Testmelding verstuurd' : 'Nog geen toestel gekoppeld, zet meldingen aan'); };
+      $('#copy').onclick = async () => { try { await navigator.clipboard.writeText(link); toast('Link gekopieerd'); } catch { toast('Houd de link ingedrukt om te kopiëren'); } };
+      $('#out').onclick = () => { localStorage.removeItem('key'); location.reload(); };
+    });
+}
+
+/* ---------- afvinken + effecten ---------- */
+let undoTimer;
+function toast(msg, undoFn) {
+  const el = $('#toast'); clearTimeout(undoTimer);
+  el.innerHTML = `<span>${esc(msg)}</span>${undoFn ? '<button id="tu">Ongedaan</button>' : ''}`;
+  el.classList.add('on');
+  if (undoFn) $('#tu').onclick = () => { el.classList.remove('on'); undoFn(); };
+  undoTimer = setTimeout(() => el.classList.remove('on'), undoFn ? 6000 : 2600);
+}
+
+async function complete(t, amount, originEl) {
+  const el = originEl || document.querySelector(`[data-id="${t.id}"] .check`);
+  const r = el ? el.getBoundingClientRect() : { left: innerWidth / 2, top: innerHeight / 2, width: 0, height: 0 };
+  await api(`/tasks/${t.id}/done`, 'POST', { amount });
+  popId = t.id; await load();
+  confetti(r.left + r.width / 2, r.top + r.height / 2);
+  navigator.vibrate && navigator.vibrate([30, 40, 60]);
+  const s = stats(tasks.find((x) => x.id === t.id));
+  toast(s.cur > 1 ? `Gelogd 🔥 ${s.cur} op rij` : 'Gelogd. Lekker bezig.', async () => { await api(`/tasks/${t.id}/undo`, 'POST'); load(); });
+}
+
+const fx = $('#fx'), cx = fx.getContext('2d');
+function confetti(x, y) {
+  if (reduced) return;
+  const dpr = devicePixelRatio || 1; fx.width = innerWidth * dpr; fx.height = innerHeight * dpr; cx.scale(dpr, dpr);
+  const cols = ['#d4ff3a', '#ffffff', '#ff6a2b', '#a6e300'];
+  const ps = Array.from({ length: 80 }, () => { const a = Math.random() * Math.PI * 2, v = 4 + Math.random() * 9;
+    return { x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 5, w: 5 + Math.random() * 6, h: 3 + Math.random() * 5, r: Math.random() * 6, vr: (Math.random() - .5) * .5, c: cols[(Math.random() * cols.length) | 0] }; });
+  const t0 = performance.now();
+  (function frame(t) {
+    const k = (t - t0) / 1500; cx.clearRect(0, 0, innerWidth, innerHeight);
+    ps.forEach((p) => { p.vy += .35; p.vx *= .985; p.x += p.vx; p.y += p.vy; p.r += p.vr; cx.save(); cx.globalAlpha = Math.max(0, 1 - k); cx.translate(p.x, p.y); cx.rotate(p.r); cx.fillStyle = p.c; cx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); cx.restore(); });
+    if (k < 1) requestAnimationFrame(frame); else cx.clearRect(0, 0, innerWidth, innerHeight);
+  })(t0);
+}
+
+/* ---------- events ---------- */
+$('#list').addEventListener('click', (e) => {
+  const card = e.target.closest('.card'); if (!card) return;
+  const t = tasks.find((x) => x.id === card.dataset.id); if (!t) return;
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'check') {
+    if (card.classList.contains('done')) return detailSheet(t);
+    t.goal ? doneSheet(t, card.querySelector('.check')) : complete(t, null, card.querySelector('.check'));
+  } else detailSheet(t);
+});
+$('#fab').onclick = () => formSheet();
+$('#gear').onclick = settingsSheet;
+
+/* ---------- push ---------- */
+const b64 = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+async function enablePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) { toast('Voeg de app eerst toe aan je beginscherm'); return; }
+  const reg = await navigator.serviceWorker.register('/sw.js');
+  if (await Notification.requestPermission() !== 'granted') { toast('Meldingen zijn geweigerd in Instellingen van iOS'); return; }
+  const { publicKey } = await fetch('/api/vapid').then((r) => r.json());
+  const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(publicKey) });
+  await api('/subscribe', 'POST', sub);
+  toast('Meldingen staan aan');
+}
+async function syncPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const reg = await navigator.serviceWorker.register('/sw.js');
+  const sub = await reg.pushManager.getSubscription();
+  if (sub && Notification.permission === 'granted') await api('/subscribe', 'POST', sub);
+  else if (Notification.permission === 'default') setTimeout(() => toast('Zet meldingen aan via ⚙'), 1500);
+}
+
+/* ---------- start ---------- */
+if (!KEY) askKey(); else { load().catch(() => {}); syncPush().catch(() => {}); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && KEY) load().catch(() => {}); });
+setInterval(() => { if (!document.hidden && KEY) load().catch(() => {}); }, 30000);
 </script>
 </body>
 </html>
