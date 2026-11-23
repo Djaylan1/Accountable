@@ -212,7 +212,7 @@ if (qk) { KEY = qk; localStorage.setItem('key', qk); history.replaceState(null, 
 
 async function api(path, method = 'GET', body) {
   const r = await fetch('/api' + path, { method, headers: { 'x-key': KEY || '', 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-  if (r.status === 401) { localStorage.removeItem('key'); KEY = null; askKey(); throw new Error('401'); }
+  if (r.status === 401) { localStorage.removeItem('key'); KEY = null; askKey('login'); throw new Error('401'); }
   if (!r.ok) throw new Error(r.status);
   return r.json();
 }
@@ -255,7 +255,8 @@ function countUp(el, to, ms = 900) {
 /* ---------- state & render ---------- */
 let tasks = [], firstRender = true, popId = null;
 
-const getName = () => { try { return localStorage.getItem('name') ?? 'Djaylan'; } catch { return 'Djaylan'; } };
+let ME = { name: '', remindMin: 60 };
+const getName = () => ME.name || '';
 function greeting() {
   const h = new Date().getHours(), n = getName().trim();
   // 00-05 nacht, 05-12 ochtend, 12-18 middag, 18-24 avond
@@ -309,7 +310,7 @@ function render() {
   firstRender = false; popId = null;
 }
 
-async function load() { tasks = await api('/tasks'); render(); }
+async function load() { [ME, tasks] = await Promise.all([api('/me'), api('/tasks')]); render(); }
 
 /* ---------- sheets ---------- */
 const sheet = $('#sheet'), bd = $('#bd');
@@ -321,9 +322,22 @@ sheet.addEventListener('touchstart', (e) => { if (sheet.scrollTop <= 0) dragY = 
 sheet.addEventListener('touchmove', (e) => { if (dragY == null) return; const d = e.touches[0].clientY - dragY; if (d > 0) { sheet.style.transition = 'none'; sheet.style.transform = `translateY(${d}px)`; } }, { passive: true });
 sheet.addEventListener('touchend', (e) => { if (dragY == null) return; const d = e.changedTouches[0].clientY - dragY; sheet.style.transition = ''; sheet.style.transform = ''; if (d > 110) closeSheet(); dragY = null; });
 
-function askKey() {
-  openSheet(`<h3>Sleutel nodig</h3><p class="sub">Plak je persoonlijke sleutel om je gewoontes te openen.</p><label>Sleutel</label><input type="text" id="k" autocapitalize="off" autocomplete="off"><button class="btn pri" id="kok">Openen</button>`,
-    () => { $('#kok').onclick = () => { KEY = $('#k').value.trim(); localStorage.setItem('key', KEY); closeSheet(); load().catch(() => {}); }; });
+function askKey(mode = 'new') {
+  const login = mode === 'login';
+  openSheet(login
+    ? `<h3>Inloggen</h3><p class="sub">Plak je persoonlijke sleutel.</p><label>Sleutel</label><input type="text" id="k" autocapitalize="off" autocomplete="off"><button class="btn pri" id="kok">Openen</button><button class="btn" id="sw">Ik heb nog geen account</button>`
+    : `<h3>Welkom bij PiP Accountable</h3><p class="sub">Maak je account aan met de uitnodigingscode van de community.</p><label>Je naam</label><input type="text" id="rn" maxlength="30" autocomplete="given-name"><label>Uitnodigingscode</label><input type="text" id="ri" autocapitalize="off" autocomplete="off"><button class="btn pri" id="kok">Account aanmaken</button><p class="sub" id="err" style="color:var(--amber);min-height:1em"></p><button class="btn" id="sw">Ik heb al een sleutel</button>`,
+    () => {
+      $('#sw').onclick = () => askKey(login ? 'new' : 'login');
+      $('#kok').onclick = async () => {
+        if (login) { KEY = $('#k').value.trim(); localStorage.setItem('key', KEY); closeSheet(); load().catch(() => {}); return; }
+        const r = await fetch('/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: $('#rn').value, invite: $('#ri').value }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { $('#err').textContent = j.error || 'Dat is niet gelukt'; return; }
+        KEY = j.key; localStorage.setItem('key', KEY); closeSheet(); load().then(syncPush).catch(() => {});
+        toast('Account aangemaakt. Bewaar je sleutel via Instellingen.');
+      };
+    });
 }
 
 function formSheet(t) {
@@ -397,14 +411,19 @@ function settingsSheet() {
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   openSheet(`<h3>Instellingen</h3><p class="sub">Meldingen en je wake-up link.</p>
     <label>Je naam</label><input type="text" id="nm" maxlength="30" value="${esc(getName())}">
+    <label>Herinnering na (minuten)</label><input type="number" id="rm" min="5" max="720" inputmode="numeric" value="${ME.remindMin}">
     <label>Meldingen</label>
     <button class="btn" id="en">${perm === 'granted' ? 'Meldingen staan aan ✓' : 'Meldingen aanzetten'}</button>
     <button class="btn" id="test">Stuur testmelding</button>
-    <label>Wake-up link (voor Opdrachten)</label><div class="copybox" id="lnk">${esc(link)}</div>
+    <button class="btn" id="wk">Ik ben nu wakker (stuur melding)</button>
+    <label>Jouw wake-up link (voor Opdrachten)</label><div class="copybox" id="lnk">${esc(link)}</div>
     <button class="btn" id="copy">Kopieer link</button>
+    <label>Jouw sleutel (bewaar hem, ook om op een ander toestel in te loggen)</label><div class="copybox">${esc(KEY)}</div>
     <button class="btn dng" id="out">Uitloggen op dit toestel</button>`,
     () => {
-      $('#nm').onchange = () => { try { localStorage.setItem('name', $('#nm').value.trim()); } catch {} render(); };
+      const saveMe = async () => { ME = await api('/me', 'PATCH', { name: $('#nm').value, remindMin: $('#rm').value }); render(); toast('Opgeslagen'); };
+      $('#nm').onchange = saveMe; $('#rm').onchange = saveMe;
+      $('#wk').onclick = async () => { const r = await fetch('/wakker?force=1', { headers: { 'x-key': KEY } }); const j = await r.json().catch(() => ({})); closeSheet(); await load(); toast(j.verstuurd?.length ? 'Melding verstuurd' : 'Geen gewoontes om te starten'); };
       $('#en').onclick = async () => { await enablePush(); settingsSheet(); };
       $('#test').onclick = async () => { const r = await api('/test', 'POST'); toast(r.apparaten ? 'Testmelding verstuurd' : 'Nog geen toestel gekoppeld, zet meldingen aan'); };
       $('#copy').onclick = async () => { try { await navigator.clipboard.writeText(link); toast('Link gekopieerd'); } catch { toast('Houd de link ingedrukt om te kopiëren'); } };
@@ -489,7 +508,7 @@ async function syncPush() {
 }
 
 /* ---------- start ---------- */
-if (!KEY) askKey(); else { load().catch(() => {}); syncPush().catch(() => {}); }
+if (!KEY) askKey('new'); else { load().catch(() => {}); syncPush().catch(() => {}); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && KEY) load().catch(() => {}); });
 setInterval(() => { if (!document.hidden && KEY) load().catch(() => {}); }, 30000);
 </script>
