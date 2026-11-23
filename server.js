@@ -8,18 +8,56 @@ const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data.json');
 const REMIND_AFTER_MIN = Number(process.env.REMIND_AFTER_MIN || 60);
 const DEDUPE_HOURS = 4; // tweede 'wakker' binnen 4 uur (bv. snooze) wordt genegeerd
 
-function load() {
-  try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch { return {}; }
-}
-const db = load();
-db.tasks ||= [];
-db.subs ||= [];
-db.key ||= process.env.APP_KEY || crypto.randomBytes(12).toString('hex');
-if (!db.vapid) db.vapid = webpush.generateVAPIDKeys();
-const save = () => fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
-save();
+// Opslag: Supabase (via SUPABASE_URL + SUPABASE_KEY + APP_KEY) of anders een lokaal bestand.
+const SB_URL = process.env.SUPABASE_URL;
+const SB_KEY = process.env.SUPABASE_KEY;
+const db = { tasks: [], subs: [] };
 
-webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@example.com', db.vapid.publicKey, db.vapid.privateKey);
+async function rpc(fn, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: { apikey: SB_KEY, authorization: 'Bearer ' + SB_KEY, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`${fn} ${r.status} ${await r.text()}`);
+  const t = await r.text();
+  return t ? JSON.parse(t) : null;
+}
+
+let saving = false, dirty = false;
+async function flush() {
+  if (saving) return;
+  saving = true;
+  try {
+    while (dirty) {
+      dirty = false;
+      await rpc('save_state', { p_secret: db.key, p_data: { tasks: db.tasks, subs: db.subs } });
+    }
+  } catch (e) { console.error('opslag fout', e.message); }
+  saving = false;
+}
+function save() {
+  if (SB_URL) { dirty = true; flush(); return; }
+  fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
+}
+
+async function init() {
+  let saved = {};
+  if (SB_URL) {
+    if (!process.env.APP_KEY) throw new Error('APP_KEY is verplicht bij Supabase-opslag');
+    saved = (await rpc('load_state', { p_secret: process.env.APP_KEY })) || {};
+  } else {
+    try { saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch {}
+  }
+  db.tasks = saved.tasks || [];
+  db.subs = saved.subs || [];
+  db.key = process.env.APP_KEY || saved.key || crypto.randomBytes(12).toString('hex');
+  db.vapid = process.env.VAPID_PUBLIC
+    ? { publicKey: process.env.VAPID_PUBLIC, privateKey: process.env.VAPID_PRIVATE }
+    : saved.vapid || webpush.generateVAPIDKeys();
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@example.com', db.vapid.publicKey, db.vapid.privateKey);
+  if (!SB_URL) save();
+}
 
 async function push(payload) {
   const body = JSON.stringify(payload);
@@ -108,7 +146,7 @@ setInterval(async () => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+init().then(() => app.listen(port, () => {
   console.log(`Draait op http://localhost:${port}`);
-  console.log(`Sleutel: ${db.key}`);
-});
+  if (!SB_URL) console.log(`Sleutel: ${db.key}`);
+})).catch((e) => { console.error(e); process.exit(1); });
